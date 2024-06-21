@@ -51,12 +51,23 @@ convertToInCNF f = convertToInCNF' f
       convertToInCNF' _ = error "Current formula is not in CNF"
 
 pureLiteralElimination :: InCNF -> (InCNF, [Int])
-pureLiteralElimination f = (f \\ pureClauses, map fst pureLiterals)
-    where
-      literals = concat f
-      groupedLiterals = group . sort $ literals
-      pureLiterals = filter (\g -> notElem (-fst g) literals) . map (\g -> (head g, length g)) $ groupedLiterals
-      pureClauses = [c | c <- f, any (\l -> elem l (map fst pureLiterals)) c]
+pureLiteralElimination f = (f', pureLits)
+  where
+    literals = concat f
+    groupedLiterals = group . sort $ literals
+    pureLiterals = filter (\g -> notElem (-fst g) literals) . map (\g -> (head g, length g)) $ groupedLiterals
+    pureLits = map fst pureLiterals
+    pureClauses = [c | c <- f, any (`elem` pureLits) c]
+    f' = f \\ pureClauses
+
+eliminateAllPureLiterals :: InCNF -> ([Int], InCNF)
+eliminateAllPureLiterals f = eliminateAllPureLiterals' f []
+  where
+    eliminateAllPureLiterals' f acc
+      | null pureLits = (acc, f')
+      | otherwise = eliminateAllPureLiterals' f' (acc ++ pureLits)
+      where
+        (f', pureLits) = pureLiteralElimination f
 
 unitProp :: InCNF -> (InCNF, [Int])
 unitProp f
@@ -77,7 +88,7 @@ dpll f
   | otherwise = (map (\solution -> us ++ ps ++ solution) (dpll ([u] : f'') ++ dpll ([-u] : f'')))
     where
       (f', us) = unitProp f
-      (f'', ps) = pureLiteralElimination f'
+      (ps, f'') = eliminateAllPureLiterals f'
       u = head.head $ f''
 
 checkSAT :: Formula -> [[(Id, Bool)]]
