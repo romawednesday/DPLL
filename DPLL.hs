@@ -1,5 +1,7 @@
 module DPLL where
 import Formula
+import Data.Tuple (swap)
+import Data.List (sort, group, nub, (\\), concatMap)
 
 type CNF = Formula
 type NNF = Formula
@@ -7,8 +9,7 @@ type InCNF = [[Int]]
 type IdMap = [(Id, Int)]
 
 idMap :: Formula -> IdMap
-idMap
-  = flip zip [1..].vars
+idMap = flip zip [1..] . vars
 
 convert :: CNF -> CNF -> CNF
 convert a (And b c) = And (convert a b) (convert a c)
@@ -19,7 +20,6 @@ toNNF :: Formula -> NNF
 toNNF (Not (And f f')) = Or (toNNF (Not f)) (toNNF (Not f'))
 toNNF (Not (Or f f')) = And (toNNF (Not f)) (toNNF (Not f'))
 toNNF (Not (Not f)) = toNNF f
-
 toNNF (BiCond f f') = toNNF (Or (And f f') (And (Not f) (Not f')))
 toNNF (Impl f f') = toNNF (Or (Not f) (f'))
 toNNF (Or f f') = Or (toNNF f) (toNNF f')
@@ -50,26 +50,35 @@ convertToInCNF f = convertToInCNF' f
             (f2 : fs')  = convertToInCNF' f'
       convertToInCNF' _ = error "Current formula is not in CNF"
 
+pureLiteralElimination :: InCNF -> (InCNF, [Int])
+pureLiteralElimination f = (f \\ pureClauses, map fst pureLiterals)
+    where
+      literals = concat f
+      groupedLiterals = group . sort $ literals
+      pureLiterals = filter (\g -> notElem (-fst g) literals) . map (\g -> (head g, length g)) $ groupedLiterals
+      pureClauses = [c | c <- f, any (\l -> elem l (map fst pureLiterals)) c]
+
 unitProp :: InCNF -> (InCNF, [Int])
 unitProp f
   | null pure = (f, [])
   | otherwise = (f', u : us)
   where
-    pure = concat.filter isPureLit $ f
+    pure = concat.filter isUnitClause $ f
     u = head pure
     (f', us) = unitProp . unitProp' $ f
     unitProp' = map (filter (/= -u)) . filter (notElem u)
-    isPureLit [_] = True
-    isPureLit _ = False
+    isUnitClause [_] = True
+    isUnitClause _ = False
 
 dpll :: InCNF -> [[Int]]
 dpll f
-  | f' == [] = [us]
-  | [] `elem` f' = []
-  | otherwise = map (us++) (dpll ([u] : f') ++ dpll ([-u] : f'))
+  | f'' == [] = [us ++ ps]
+  | [] `elem` f'' = []
+  | otherwise = (map (\solution -> us ++ ps ++ solution) (dpll ([u] : f'') ++ dpll ([-u] : f'')))
     where
       (f', us) = unitProp f
-      u = head.head $ f'
+      (f'', ps) = pureLiteralElimination f'
+      u = head.head $ f''
 
 checkSAT :: Formula -> [[(Id, Bool)]]
 checkSAT f = (map (map toPair).listAll.toDP) f
@@ -77,7 +86,7 @@ checkSAT f = (map (map toPair).listAll.toDP) f
       toDP = dpll . convertToInCNF . toCNF
       listAll = map reverse.concatMap (getElems fVars [])
       fVars = [1..length (vars f)]
-      fMap = (map (\(a, b) -> (b, a)) . idMap) f
+      fMap = (map swap . idMap) f
       getElems :: [Int] -> [Int] -> [Int] -> [[Int]]
       getElems [] acc _ = [acc]
       getElems (x : xs) acc s
