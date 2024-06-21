@@ -8,6 +8,7 @@ import Text.Parsec.String (Parser)
 import Text.Parsec.Expr
 import Text.Parsec.Language (emptyDef)
 import qualified Text.Parsec.Token as Token
+import Data.Functor (($>))
 
 lexer = Token.makeTokenParser emptyDef
 
@@ -16,11 +17,11 @@ reservedOp = Token.reservedOp lexer
 identifier = Token.identifier lexer
 whiteSpace = Token.whiteSpace lexer
 
-table = [ [Prefix (reservedOp "!" >> return Not) ]
-        , [Infix  (reservedOp "&" >> return And) AssocLeft]
-        , [Infix  (reservedOp "|" >> return Or) AssocLeft]
-        , [Infix  (reservedOp "->" >> return Impl) AssocRight]
-        , [Infix  (reservedOp "<->" >> return BiCond) AssocRight]
+table = [ [Prefix (reservedOp "!" $> Not) ]
+        , [Infix  (reservedOp "&" $> And) AssocLeft]
+        , [Infix  (reservedOp "|" $> Or) AssocLeft]
+        , [Infix  (reservedOp "->" $> Impl) AssocRight]
+        , [Infix  (reservedOp "<->" $> BiCond) AssocRight]
         ]
 
 expr :: Parser Formula
@@ -46,5 +47,6 @@ main = do
             case parseFormula queryInput of
                 Left err -> print err
                 Right query -> do
-                    let result = checkWithDPLL formula query
+                    let cnfQuery = toCNF $ toNNF query
+                    let result = checkWithDPLL formula cnfQuery
                     putStrLn $ "Result: " ++ show result
