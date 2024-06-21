@@ -46,6 +46,4 @@ eval idMap
       eval' (And f f') = eval' f && eval' f'
       eval' (Or f f') = eval' f || eval' f'
       eval' (Impl f f') = eval' (Not f) || eval' f'
-      eval' (BiCond f f') = (eval' f && eval' f') || (eval' (Not f) && eval' (Not f'))
-
-
+      eval' (BiCond f f') = (eval' f == eval' f')
